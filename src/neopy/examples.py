@@ -1,10 +1,10 @@
 from neo4j.v1 import GraphDatabase
 
-from . import (
+from .neo.cypher import (
     Node as N, Relationship as Rel, RelationshipTo as RelTo,
-    RelationshipFrom as RelFrom, NodeLabel as L, RelationshipType as T,
-    ShortestPath as P, CypherQuery, Variable as V)
-
+    NodeLabel as L, RelationshipType as T,
+    ShortestPath as Sp, Identifier as I)
+from .neo.query import CypherQuerySet as CypherQuery
 
 # driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
 
@@ -65,7 +65,7 @@ def example3():
     queries['naive concat'] = query
 
     # solution with built-in Neo4j foreach method
-    name_variable = V('name')
+    name_variable = I('name')
     query = CypherQuery().match(you).foreach(
         name_variable, names, CypherQuery().create(
             you, friend, Person(name=name_variable)
@@ -111,7 +111,7 @@ def example6_flat():
     query = CypherQuery()\
         .match(N('you', name='You'))\
         .match(N('expert'), RelTo(T('worked_with')), N('db', L('Database'), name='Neo4j'))\
-        .match(P('path', N('you'), Rel(T('friend')).max(5), N('expert')))\
+        .match(Sp('path', N('you'), Rel(T('friend')).max(5), N('expert')))\
         .values('db', 'expert', 'path')
 
     return query
@@ -127,7 +127,7 @@ def example6_composed():
     db = N('db', L('Database'), name='Neo4j')
     worked_with = RelTo(T('worked_with'))
     friend = Rel(T('friend'))
-    path = P('path', you, friend.max(5), expert)
+    path = Sp('path', you, friend.max(5), expert)
 
     query = CypherQuery()\
         .match(you.set(name='You'))\
@@ -155,3 +155,40 @@ def official():
         session.write_transaction(add_friends, "Arthur", "Lancelot")
         session.write_transaction(add_friends, "Arthur", "Merlin")
         session.read_transaction(print_friends, "Arthur")
+
+
+def example7():
+    # OPTIONAL MATCH (user:User)-[FRIENDS_WITH]-(friend:User)
+    # WHERE user.Id = 1234
+    # RETURN user, count(friend) AS NumberOfFriends
+
+    def Count(v): return v
+
+    query = CypherQuery().optional_match(
+        N('user', L('User')),
+        Rel(T('friends_with')),
+        N('friend', L('User'))
+    ).where(user__id=1234).values('user', number_of_friends=Count('friend'))
+
+    user_label = L('User')
+    user = N('user', user_label)
+    friend = N('friend', user_label)
+    rel = Rel(T('friends_with'))
+    n_of_f = Count(friend)
+
+    query = CypherQuery().optional_match(
+        user, rel, friend).where(user__id=1234).return_(user, n_of_f)
+
+    return query
+
+
+examples = [
+    example1,
+    example2,
+    example3,
+    example4,
+    example5,
+    example6_flat,
+    example6_composed,
+    example7,
+]

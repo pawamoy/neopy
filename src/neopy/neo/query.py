@@ -3,56 +3,73 @@ from copy import deepcopy
 
 from .db import driver
 from .enums import RelationshipDirection
-from .cypher import CypherQuery
+
+from .cypher import Create, Path, Match
+
+
+def args_to_paths(*args):
+    paths = []
+    components = []
+    for arg in args:
+        if isinstance(arg, Path):
+            if components:
+                paths.append(Path(*components))
+                components = []
+            paths.append(arg)
+        else:
+            components.append(arg)
+    if components:
+        paths.append(Path(*components))
+    return paths
 
 
 class CypherQuerySet:
-    def __init__(self, query=None):
-        self.query = query or CypherQuery()
+    def __init__(self):
+        self.statements = []
         self._built = False
         self._executed = False
         self._query_result = None
 
     def __str__(self):
-        if not self._built:
-            self._build()
-        return self._query_string
+        return ''.join(s.as_cypher() for s in self.statements)
 
     def _clone(self):
         return deepcopy(self)
 
     def create(self, *args, **kwargs):
         clone = self._clone()
-        clone.query.add_create_statement(*args, **kwargs)
+        paths = args_to_paths(*args)
+        clone.statements.append(Create(*paths))
         return clone
 
     def delete(self, *args, **kwargs):
         clone = self._clone()
-        clone.query.add_delete_statement(*args, **kwargs)
+        clone.statements.append(*args, **kwargs)
         return clone
 
     # update for django
     def set(self, *args, **kwargs):
         clone = self._clone()
-        clone.query.add_set_statement(*args, **kwargs)
+        clone.statements.append(*args, **kwargs)
         return clone
 
     # no equivalent
     def remove(self, *args, **kwargs):
         clone = self._clone()
-        clone.query.add_remove_statement(*args, **kwargs)
+        clone.statements.append(*args, **kwargs)
         return clone
 
     # get_or_create for django
     def merge(self, *args, **kwargs):
         clone = self._clone()
-        clone.query.add_merge_statement(*args, **kwargs)
+        clone.statements.append(*args, **kwargs)
         return clone
 
     # get for django
     def match(self, *args, optional=False, **kwargs):
         clone = self._clone()
-        clone.query.add_match_statement(*args, optional=optional, **kwargs)
+        paths = args_to_paths(*args)
+        clone.statements.append(Match(*paths))
         return clone
 
     # filter for django
@@ -62,29 +79,29 @@ class CypherQuerySet:
             # operator: gte, gt, lte, lt, startswith, endswith, contains
             #           istartwtih, iendswith, icontains, iexact, in
         clone = self._clone()
-        clone.query.add_where_statement(*args, **kwargs)
+        clone.statements.append(*args, **kwargs)
         return clone
 
     # return for cypher
     def values(self, *args, **kwargs):
         clone = self._clone()
-        clone.query.add_values_statement(*args, **kwargs)
+        clone.statements.append(*args, **kwargs)
         return clone
 
     def order_by(self, *args, **kwargs):
         clone = self._clone()
-        clone.query.add_order_by_statement(*args, **kwargs)
+        clone.statements.append(*args, **kwargs)
         return clone
 
     def limit(self, *args, **kwargs):
         clone = self._clone()
-        clone.query.add_limit_statement(*args, **kwargs)
+        clone.statements.append(*args, **kwargs)
         return clone
 
     # no equivalent
     def foreach(self, *args, **kwargs):
         clone = self._clone()
-        clone.query.add_foreach_statement(*args, **kwargs)
+        clone.statements.append(*args, **kwargs)
         return clone
 
 
@@ -296,7 +313,7 @@ class CypherVariable:
         return self.name
 
 
-Q = CypherQuery
+# Q = CypherQuery
 Qs = CypherQuerySet
 N = CypherNode
 L = CypherNodeLabel

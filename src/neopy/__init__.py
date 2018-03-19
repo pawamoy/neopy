@@ -30,3 +30,11 @@
 # -[id:type]->
 # -[{property:value}]->
 # -[:type*min..max]->
+
+# Parameters cannot be used with
+#   property keys; so, MATCH (n) WHERE n.$param = 'something' is invalid
+#   relationship types
+#   labels
+
+# All reserved keywords:
+# https://neo4j.com/docs/developer-manual/current/cypher/syntax/reserved/
