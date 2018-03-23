@@ -1,23 +1,34 @@
-from neo4j.v1 import GraphDatabase
+from unittest import TestCase
 
-from .neo.cypher import (
+from .graph import (
     Node as N, Relationship as Rel, RelationshipTo as RelTo,
-    NodeLabel as L, RelationshipType as T,
-    ShortestPath as Sp, Identifier as I)
-from .neo.query import CypherQuerySet as CypherQuery
+    NodeLabel as L, RelationshipType as T, CypherQuery as Q)
 
-# driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
+
+class Person(N):
+    def __init__(self, *labels, **properties):
+        super().__init__(*labels, **properties)
+        self.labels.add(L('Person'))
+
+
+def get_result(query):
+    records = query.run()
+    records_list = list(records)
+    first_record = records_list[0]
+    first_record_values = first_record.values()
+    return first_record_values
+    # return list(query.run())[0].values()
 
 
 def example1():
     # CREATE (you:Person {name:"You"})
     # RETURN you
-    query = CypherQuery().create(N('you', L('Person'), name='You')).values('you')
+    query = Q().create(N('you', L('Person'), name='You')).return_('you')
 
     # The following should could also work, implicitly:
-    # query = CypherQuery().create(N('you', L('Person'), name='You'))
+    # query = Q().create(N('you', L('Person'), name='You'))
 
-    return query
+    return get_result(query)
 
 
 def example2():
@@ -28,63 +39,78 @@ def example2():
     you = N('you', person_label, name='You')
     like = RelTo('like', T('like'))
     neo = N('neo', L('Database'), name='Neo4j')
-    query = CypherQuery()\
+    query = Q()\
         .match(you)\
         .create(you, like, neo)\
-        .values(you, like, neo)
+        .return_(you, like, neo)
 
-    return query
+    return get_result(query)
 
 
-def example3():
+def example3_naive_python():
     # MATCH (you:Person {name:"You"})
     # FOREACH (name in ["Johan","Rajesh","Anna","Julia","Andrew"] |
     #   CREATE (you)-[:FRIEND]->(:Person {name:name}))
-    person_label = L('Person')
-
-    class Person(N):
-        def __init__(self, *labels, **properties):
-            super().__init__(*labels, **properties)
-            self.labels.add(person_label)
 
     you = Person('you', name='You')
     names = ["Johan", "Rajesh", "Anna", "Julia", "Andrew"]
     friend = RelTo(T('friend'))
 
-    queries = {}
+    queries = []
 
     # naive solution with Python for-loop
     for name in names:
-        query = CypherQuery().create(you, friend, Person(name=name))
-        queries['naive python'] = query
+        queries.append(
+            Q().match(you).create(you, friend, Person(name=name)).return_(you))
+
+    return [get_result(q) for q in queries]
+
+
+def example3_naive_concat():
+    # MATCH (you:Person {name:"You"})
+    # FOREACH (name in ["Johan","Rajesh","Anna","Julia","Andrew"] |
+    #   CREATE (you)-[:FRIEND]->(:Person {name:name}))
+
+    you = Person('you', name='You')
+    names = ["Johan", "Rajesh", "Anna", "Julia", "Andrew"]
+    friend = RelTo(T('friend'))
 
     # naive solution with query concatenation
-    query = CypherQuery()
-    for name in names:
-        query = query.create(you, friend, Person(name=name))
-    queries['naive concat'] = query
+    query = Q()
+    for i, name in enumerate(names):
+        cid = 'id%s' % i
+        query = query.create(you, friend, Person(cid, name=name)).return_(cid)
+    return get_result(query)
+
+
+def example3_foreach():
+    # MATCH (you:Person {name:"You"})
+    # FOREACH (name in ["Johan","Rajesh","Anna","Julia","Andrew"] |
+    #   CREATE (you)-[:FRIEND]->(:Person {name:name}))
+
+    you = Person('you', name='You')
+    names = ["Johan", "Rajesh", "Anna", "Julia", "Andrew"]
+    friend = RelTo(T('friend'))
 
     # solution with built-in Neo4j foreach method
     name_variable = I('name')
-    query = CypherQuery().match(you).foreach(
-        name_variable, names, CypherQuery().create(
+    query = Q().match(you).foreach(
+        name_variable, names, Q().create(
             you, friend, Person(name=name_variable)
         )
     )
-    queries['foreach'] = query
-
-    return queries
+    return get_result(query)
 
 
 def example4():
     # MATCH (you {name:"You"})-[:FRIEND]->(yourFriends)
     # RETURN you, yourFriends
-    query = CypherQuery().match(
+    query = Q().match(
         N('you', name='You'),
         RelTo(T('friend')),
         N('yourFriends')
-    ).values('you', 'yourFriends')
-    return query
+    ).return_('you', 'yourFriends')
+    return get_result(query)
 
 
 def example5():
@@ -95,11 +121,11 @@ def example5():
     neo = N('neo', L('Database'), name='Neo4j')
     anna = N('anna', person, name='Anna')
 
-    query = CypherQuery().match(neo).match(anna).create(
+    query = Q().match(neo).match(anna).create(
         anna, RelTo(T('friend')),
         N(person, name='Amanda'),
         RelTo(T('worked_with')), neo)
-    return query
+    return get_result(query)
 
 
 def example6_flat():
@@ -108,13 +134,13 @@ def example6_flat():
     # MATCH path = shortestPath( (you)-[:FRIEND*..5]-(expert) )
     # RETURN db,expert,path
 
-    query = CypherQuery()\
+    query = Q()\
         .match(N('you', name='You'))\
         .match(N('expert'), RelTo(T('worked_with')), N('db', L('Database'), name='Neo4j'))\
-        .match(Sp('path', N('you'), Rel(T('friend')).max(5), N('expert')))\
-        .values('db', 'expert', 'path')
+        .match(Sp('path', N('you'), Rel(T('friend')).range(None, 5), N('expert')))\
+        .return_('db', 'expert', 'path')
 
-    return query
+    return get_result(query)
 
 
 def example6_composed():
@@ -127,34 +153,15 @@ def example6_composed():
     db = N('db', L('Database'), name='Neo4j')
     worked_with = RelTo(T('worked_with'))
     friend = Rel(T('friend'))
-    path = Sp('path', you, friend.max(5), expert)
+    path = Sp('path', you, friend.range(None, 5), expert)
 
-    query = CypherQuery()\
+    query = Q()\
         .match(you.set(name='You'))\
         .match(expert, worked_with, db)\
         .match(path)\
-        .values(db, expert, path)
+        .return_(db, expert, path)
 
-    return query
-
-
-def official():
-    def add_friends(tx, name, friend_name):
-        tx.run("MERGE (a:Person {name: $name}) "
-               "MERGE (a)-[:KNOWS]->(friend:Person {name: $friend_name})",
-               name=name, friend_name=friend_name)
-
-    def print_friends(tx, name):
-        for record in tx.run(
-                "MATCH (a:Person)-[:KNOWS]->(friend) WHERE a.name = $name "
-                "RETURN friend.name ORDER BY friend.name", name=name):
-            print(record["friend.name"])
-
-    with driver.session() as session:
-        session.write_transaction(add_friends, "Arthur", "Guinevere")
-        session.write_transaction(add_friends, "Arthur", "Lancelot")
-        session.write_transaction(add_friends, "Arthur", "Merlin")
-        session.read_transaction(print_friends, "Arthur")
+    return get_result(query)
 
 
 def example7():
@@ -164,11 +171,11 @@ def example7():
 
     def Count(v): return v
 
-    query = CypherQuery().optional_match(
+    query = Q().optional_match(
         N('user', L('User')),
         Rel(T('friends_with')),
         N('friend', L('User'))
-    ).where(user__id=1234).values('user', number_of_friends=Count('friend'))
+    ).where(user__id=1234).return_('user', number_of_friends=Count('friend'))
 
     user_label = L('User')
     user = N('user', user_label)
@@ -176,19 +183,50 @@ def example7():
     rel = Rel(T('friends_with'))
     n_of_f = Count(friend)
 
-    query = CypherQuery().optional_match(
+    query = Q().optional_match(
         user, rel, friend).where(user__id=1234).return_(user, n_of_f)
 
-    return query
+    return get_result(query)
 
 
-examples = [
-    example1,
-    example2,
-    example3,
-    example4,
-    example5,
-    example6_flat,
-    example6_composed,
-    example7,
-]
+class MainTestCase(TestCase):
+    def setUp(self):
+        pass
+
+    def tearDown(self):
+        pass
+
+    def test_example1(self):
+        result = example1()
+        print(result)
+
+    def test_example2(self):
+        result = example2()
+        print(result)
+
+    def test_example3(self):
+        result1 = example3_naive_python()
+        print(result1)
+        result2 = example3_naive_concat()
+        print(result2)
+        # result3 = example3_foreach()
+        # print(result3)
+
+    def test_example4(self):
+        result = example4()
+        print(result)
+
+    def test_example5(self):
+        result = example5()
+        print(result)
+
+    def test_example6(self):
+        result1 = example6_composed()
+        print(result1)
+        result2 = example6_flat()
+        print(result2)
+
+    def test_example7(self):
+        result = example7()
+        print(result)
+
