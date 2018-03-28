@@ -3,24 +3,17 @@ import string
 
 from neo4j.v1 import types
 
-from .cypher import Cypher, Properties, cypher_primitive
+from .cypher import Cypher, Properties, cypher_primitive, Query
 from .db import driver
 from .exceptions import CypherIdAlreadyUsed, CypherError
 from .functions import fn
-from .query import QueryBuilder
 from .utils import split_id_args, clone
 
 
-# TODO: amaybe rename CypherQuery "Graph"
-# from neopy.graph import Graph
-# graph = Graph()
-# results = graph.match()...
-# for r in results: ...
-
-class CypherQuery:
+class Graph:
     def __init__(self):
         self.cypher = ''  # TODO: remove when QueryBuilder is ready
-        self.query = QueryBuilder()
+        self.query = Query()
 
         # TODO: move this in QueryBuilder
         # We keep trace of the matched components so we use
@@ -40,7 +33,8 @@ class CypherQuery:
 
     @clone
     def match(self, *args, **kwargs):
-        print('match query', *(str(a) for a in args), kwargs)
+        self.query.add_match(*args, **kwargs)
+
         self.cypher += 'MATCH '
         for arg in args:
             self.cypher += arg.as_cypher()
@@ -65,7 +59,8 @@ class CypherQuery:
 
     @clone
     def where(self, *conditions, **properties):
-        print('where query', conditions, properties)
+        self.query.add_where(*conditions, **properties)
+
         self.cypher += 'WHERE '
         cypher_wheres = []
         if conditions:
@@ -93,7 +88,8 @@ class CypherQuery:
 
     @clone
     def create(self, *args, **kwargs):
-        print('create query', *(str(a) for a in args), kwargs)
+        self.query.add_create(*args, **kwargs)
+
         self.cypher += 'CREATE '
         for arg in args:
             if hasattr(arg, 'cypher_id') and arg.cypher_id:
@@ -109,7 +105,8 @@ class CypherQuery:
 
     @clone
     def return_(self, *args, **kwargs):
-        print('return query', *(str(a) for a in args), kwargs)
+        self.query.add_return(*args, **kwargs)
+
         self.cypher += 'RETURN '
         cypher_ids = []
         for arg in args:
@@ -122,22 +119,22 @@ class CypherQuery:
 
     @clone
     def delete(self, *args, **kwargs):
-        print('delete query', *(str(a) for a in args), kwargs)
+        self.query.add_delete(*args, **kwargs)
         return self
 
     @clone
     def set(self, *args, **kwargs):
-        print('set query', *(str(a) for a in args), kwargs)
+        self.query.add_set(*args, **kwargs)
         return self
 
     @clone
     def remove(self, *args, **kwargs):
-        print('remove query', *(str(a) for a in args), kwargs)
+        self.query.add_remove(*args, **kwargs)
         return self
 
     @clone
     def merge(self, *args, **kwargs):
-        print('merge query', *(str(a) for a in args), kwargs)
+        self.query.add_merge(*args, **kwargs)
         return self
 
     def get_unused_id(self):
@@ -172,7 +169,7 @@ class Node(Cypher):
 
     def create(self, *args, **kwargs):
         print('create node', *(str(a) for a in args), kwargs)
-        records = list(CypherQuery().create(self).return_(self).run())
+        records = list(Graph().create(self).return_(self).run())
         created = records[0].value(self.cypher_id)
         self.internal_id = created.id
         return self
@@ -183,7 +180,7 @@ class Node(Cypher):
         # return rel with start_node=self, end_node=node
         if not self.internal_id:
             raise CypherError
-        query = CypherQuery().match_id(self)
+        query = Graph().match_id(self)
         if relationship.cypher_id is None:
             relationship.cypher_id = query.get_unused_id()
         returns = [relationship]

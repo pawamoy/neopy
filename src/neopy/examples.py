@@ -2,7 +2,10 @@ from unittest import TestCase
 
 from .graph import (
     Node as N, Relationship as Rel, RelationshipTo as RelTo,
-    NodeLabel as L, RelationshipType as T, CypherQuery as Q)
+    NodeLabel as L, RelationshipType as T, Graph)
+
+
+graph = Graph()
 
 
 class Person(N):
@@ -23,10 +26,10 @@ def get_result(query):
 def example1():
     # CREATE (you:Person {name:"You"})
     # RETURN you
-    query = Q().create(N('you', L('Person'), name='You')).return_('you')
+    query = graph.create(N('you', L('Person'), name='You')).return_('you')
 
     # The following should could also work, implicitly:
-    # query = Q().create(N('you', L('Person'), name='You'))
+    # query = graph.create(N('you', L('Person'), name='You'))
 
     return get_result(query)
 
@@ -39,7 +42,7 @@ def example2():
     you = N('you', person_label, name='You')
     like = RelTo('like', T('like'))
     neo = N('neo', L('Database'), name='Neo4j')
-    query = Q()\
+    query = graph\
         .match(you)\
         .create(you, like, neo)\
         .return_(you, like, neo)
@@ -61,7 +64,7 @@ def example3_naive_python():
     # naive solution with Python for-loop
     for name in names:
         queries.append(
-            Q().match(you).create(you, friend, Person(name=name)).return_(you))
+            graph.match(you).create(you, friend, Person(name=name)).return_(you))
 
     return [get_result(q) for q in queries]
 
@@ -76,7 +79,7 @@ def example3_naive_concat():
     friend = RelTo(T('friend'))
 
     # naive solution with query concatenation
-    query = Q()
+    query = graph
     for i, name in enumerate(names):
         cid = 'id%s' % i
         query = query.create(you, friend, Person(cid, name=name)).return_(cid)
@@ -94,8 +97,8 @@ def example3_foreach():
 
     # solution with built-in Neo4j foreach method
     name_variable = I('name')
-    query = Q().match(you).foreach(
-        name_variable, names, Q().create(
+    query = graph.match(you).foreach(
+        name_variable, names, graph.create(
             you, friend, Person(name=name_variable)
         )
     )
@@ -105,7 +108,7 @@ def example3_foreach():
 def example4():
     # MATCH (you {name:"You"})-[:FRIEND]->(yourFriends)
     # RETURN you, yourFriends
-    query = Q().match(
+    query = graph.match(
         N('you', name='You'),
         RelTo(T('friend')),
         N('yourFriends')
@@ -121,7 +124,7 @@ def example5():
     neo = N('neo', L('Database'), name='Neo4j')
     anna = N('anna', person, name='Anna')
 
-    query = Q().match(neo).match(anna).create(
+    query = graph.match(neo).match(anna).create(
         anna, RelTo(T('friend')),
         N(person, name='Amanda'),
         RelTo(T('worked_with')), neo)
@@ -134,7 +137,7 @@ def example6_flat():
     # MATCH path = shortestPath( (you)-[:FRIEND*..5]-(expert) )
     # RETURN db,expert,path
 
-    query = Q()\
+    query = graph\
         .match(N('you', name='You'))\
         .match(N('expert'), RelTo(T('worked_with')), N('db', L('Database'), name='Neo4j'))\
         .match(Sp('path', N('you'), Rel(T('friend')).range(None, 5), N('expert')))\
@@ -155,7 +158,7 @@ def example6_composed():
     friend = Rel(T('friend'))
     path = Sp('path', you, friend.range(None, 5), expert)
 
-    query = Q()\
+    query = graph\
         .match(you.set(name='You'))\
         .match(expert, worked_with, db)\
         .match(path)\
@@ -171,7 +174,7 @@ def example7():
 
     def Count(v): return v
 
-    query = Q().optional_match(
+    query = graph.optional_match(
         N('user', L('User')),
         Rel(T('friends_with')),
         N('friend', L('User'))
@@ -183,7 +186,7 @@ def example7():
     rel = Rel(T('friends_with'))
     n_of_f = Count(friend)
 
-    query = Q().optional_match(
+    query = graph.optional_match(
         user, rel, friend).where(user__id=1234).return_(user, n_of_f)
 
     return get_result(query)
