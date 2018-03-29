@@ -1,9 +1,6 @@
-import random
-import string
-
 from neo4j.v1 import types
 
-from .cypher import Cypher, Properties, cypher_primitive, Query
+from .cypher import Cypher, Properties, Query
 from .db import driver
 from .exceptions import CypherIdAlreadyUsed, CypherError
 from .functions import fn
@@ -12,109 +9,43 @@ from .utils import split_id_args, clone
 
 class Graph:
     def __init__(self):
-        self.cypher = ''  # TODO: remove when QueryBuilder is ready
         self.query = Query()
 
-        # TODO: move this in QueryBuilder
-        # We keep trace of the matched components so we use
-        # their cypher IDs only in Create statements.
-        self._matched_ids = set()
-
-        # TODO: move this in QueryBuilder
-        # We keep trace of the created components so we use
-        # their cypher IDs only in further statements.
-        self._created_ids = set()
-
     def run(self):
-        print('run query ', self.cypher)
         with driver.session() as session:
             with session.begin_transaction() as tx:
-                return tx.run(self.cypher)
+                return tx.run(self.query.render())
 
     @clone
     def match(self, *args, **kwargs):
         self.query.add_match(*args, **kwargs)
-
-        self.cypher += 'MATCH '
-        for arg in args:
-            self.cypher += arg.as_cypher()
-            if hasattr(arg, 'cypher_id'):
-                self._matched_ids.add(arg.cypher_id)
-        self.cypher += ' '
         return self
 
-    def match_id(self, node, **kwargs):
-        print('match id query', node, kwargs)
+    def match_id(self, node):
         if node.cypher_id:
-            if node.cypher_id in self._matched_ids:
+            if node.cypher_id in self.query.matched_ids:
                 raise CypherIdAlreadyUsed(node.cypher_id)
             node_cypher_id = node.cypher_id
         else:
-            node_cypher_id = self.get_unused_id()
+            node_cypher_id = self.query.get_unused_id()
         self_clone = self.match(Node(node_cypher_id)).where(
             fn.Id(node_cypher_id).eq(node.internal_id))
-        self_clone._matched_ids.add(node_cypher_id)
-        self_clone.cypher += ' '
+        self_clone.query.matched_ids.add(node_cypher_id)
         return self_clone
 
     @clone
     def where(self, *conditions, **properties):
         self.query.add_where(*conditions, **properties)
-
-        self.cypher += 'WHERE '
-        cypher_wheres = []
-        if conditions:
-            cypher_wheres.extend([c.as_cypher() for c in conditions])
-        if properties:
-            for p_key, p_value in properties.items():
-                splits = p_key.split('__')
-                if len(splits) == 1:
-                    raise CypherError
-                elif len(splits) == 2:
-                    cypher_id, p_key = splits
-                    if isinstance(p_value, Cypher):
-                        p_value = p_value.as_cypher()
-                    else:
-                        p_value = cypher_primitive(p_value)
-                    cypher_wheres.append('{}.{} = {}'.format(
-                        cypher_id, p_key, p_value))
-                elif len(splits) == 3:
-                    cypher_id, p_key, operator = splits
-                    pass  # TODO
-                else:
-                    raise CypherError
-        self.cypher += ', '.join(cypher_wheres)
         return self
 
     @clone
     def create(self, *args, **kwargs):
         self.query.add_create(*args, **kwargs)
-
-        self.cypher += 'CREATE '
-        for arg in args:
-            if hasattr(arg, 'cypher_id') and arg.cypher_id:
-                if arg.cypher_id in self._matched_ids | self._created_ids:
-                    self.cypher += arg.as_cypher(keys=['id'])
-                else:
-                    self.cypher += arg.as_cypher()
-                    self._created_ids.add(arg.cypher_id)
-            else:
-                self.cypher += arg.as_cypher()
-        self.cypher += ' '
         return self
 
     @clone
     def return_(self, *args, **kwargs):
         self.query.add_return(*args, **kwargs)
-
-        self.cypher += 'RETURN '
-        cypher_ids = []
-        for arg in args:
-            if isinstance(arg, Cypher) and hasattr(arg, 'cypher_id'):
-                cypher_ids.append(arg.cypher_id)
-            elif isinstance(arg, str):
-                cypher_ids.append(arg)
-        self.cypher += ', '.join(cypher_ids) + ' '
         return self
 
     @clone
@@ -136,13 +67,6 @@ class Graph:
     def merge(self, *args, **kwargs):
         self.query.add_merge(*args, **kwargs)
         return self
-
-    def get_unused_id(self):
-        letters = string.ascii_lowercase
-        while True:
-            new_id = ''.join(random.choice(letters) for _ in range(8))
-            if new_id not in self._matched_ids:
-                return new_id
 
 
 class NodeLabel:

@@ -1,5 +1,10 @@
+import copy
+import string
+import random
+
 from collections import Iterable, namedtuple
 
+from .exceptions import CypherError
 
 StatementArgs = namedtuple('StatementArgs', 'args kwargs')
 
@@ -24,6 +29,9 @@ class Properties(dict):
 
     def __setattr__(self, key, value):
         self[key] = value
+
+    def __deepcopy__(self, memo):
+        return Properties(copy.deepcopy(dict(self)))
 
     def as_cypher(self):
         if not self:
@@ -69,17 +77,17 @@ class Query:
 
         # We keep trace of the matched components so we use
         # their cypher IDs only in Create statements.
-        self._matched_ids = set()
+        self.matched_ids = set()
 
         # We keep trace of the created components so we use
         # their cypher IDs only in further statements.
-        self._created_ids = set()
+        self.created_ids = set()
 
     def add_match(self, *args, **kwargs):
         self.statements.matches.append(StatementArgs(args, kwargs))
 
     def add_where(self, *args, **kwargs):
-        self.statements.matches.append(StatementArgs(args, kwargs))
+        self.statements.wheres.append(StatementArgs(args, kwargs))
 
     def add_create(self, *args, **kwargs):
         self.statements.creates.append(StatementArgs(args, kwargs))
@@ -124,25 +132,71 @@ class Query:
     def render_matches(self):
         cyphers = []
         for match in self.statements.matches:
-            cypher = 'MATCH '
+            cypher_matches = []
             for arg in match.args:
-                cypher += arg.as_cypher()
+                cypher_matches.append(arg.as_cypher())
                 if hasattr(arg, 'cypher_id') and arg.cypher_id:
-                    self._matched_ids.add(arg.cypher_id)
-            cyphers.append(cypher)
+                    self.matched_ids.add(arg.cypher_id)
+            cyphers.append('MATCH ' + ''.join(cypher_matches))
         return ' '.join(cyphers)
 
     def render_wheres(self):
-        pass
+        cyphers = []
+        for where in self.statements.wheres:
+            cypher_wheres = []
+            if where.args:
+                cypher_wheres.extend([a.as_cypher() for a in where.args])
+            if where.kwargs:
+                for p_key, p_value in where.kwargs.items():
+                    splits = p_key.split('__')
+                    if len(splits) == 1:
+                        raise CypherError
+                    elif len(splits) == 2:
+                        cypher_id, p_key = splits
+                        if isinstance(p_value, Cypher):
+                            p_value = p_value.as_cypher()
+                        else:
+                            p_value = cypher_primitive(p_value)
+                        cypher_wheres.append('{}.{} = {}'.format(
+                            cypher_id, p_key, p_value))
+                    elif len(splits) == 3:
+                        cypher_id, p_key, operator = splits
+                        pass  # TODO
+                    else:
+                        raise CypherError
+            cyphers.append('WHERE ' + ', '.join(cypher_wheres))
+        return ' '.join(cyphers)
 
     def render_creates(self):
-        pass
+        cyphers = []
+        for create in self.statements.creates:
+            cypher_creates = []
+            for arg in create.args:
+                if hasattr(arg, 'cypher_id') and arg.cypher_id:
+                    if arg.cypher_id in self.matched_ids | self.created_ids:
+                        cypher_creates.append(arg.as_cypher(keys=['id']))
+                    else:
+                        cypher_creates.append(arg.as_cypher())
+                        self.created_ids.add(arg.cypher_id)
+                else:
+                    cypher_creates.append(arg.as_cypher())
+            cyphers.append('CREATE ' + ''.join(cypher_creates))
+        return ' '.join(cyphers)
 
     def render_deletes(self):
         pass
 
     def render_returns(self):
-        pass
+        cyphers = []
+        for return_ in self.statements.returns:
+            cypher_returns = []
+            for arg in return_.args:
+                if isinstance(arg, Cypher) and hasattr(arg, 'cypher_id'):
+                    cypher_returns.append(arg.cypher_id)
+                elif isinstance(arg, str):
+                    cypher_returns.append(arg)
+            cyphers.append('RETURN ' + ', '.join(cypher_returns))
+        return ' '.join(cyphers)
 
     def render_sets(self):
         pass
@@ -152,3 +206,10 @@ class Query:
 
     def render_merges(self):
         pass
+
+    def get_unused_id(self):
+        letters = string.ascii_lowercase
+        while True:
+            new_id = ''.join(random.choice(letters) for _ in range(8))
+            if new_id not in self.matched_ids:
+                return new_id
