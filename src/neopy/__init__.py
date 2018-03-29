@@ -1,3 +1,11 @@
+"""
+Neo4j for Python.
+
+Manipulate graph data in Python with Neo4j as data storage.
+"""
+
+__version__ = '0.1.0'
+
 # driver = GraphDatabase.driver(uri, auth=("neo4j", "neo4j"))
 
 # cypher language

@@ -91,16 +91,13 @@ class Node(Cypher):
             'properties': self.properties.as_cypher()
         }
 
-    def create(self, *args, **kwargs):
+    def create(self):
         records = list(Graph().create(self).return_(self).run())
         created = records[0].value(self.cypher_id)
         self.internal_id = created.id
         return self
 
     def connect(self, relationship, node):
-        # if node has internal id, pre-match it
-        # query.match(self).create(self, rel, node).return_(rel)
-        # return rel with start_node=self, end_node=node
         if not self.internal_id:
             raise CypherError
         graph = Graph().match_id(self)
