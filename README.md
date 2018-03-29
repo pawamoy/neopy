@@ -7,43 +7,49 @@ manipulating data stored in a Neo4j database.
 This is a very early attempt, not even alpha.
 
 The first wanted feature is the ability to write Cypher queries in Python,
-using the power of Cypher without its syntax. This results in a more verbose
-but more flexible query language.
+using the power of Cypher without its syntax. This results in a verbose
+but composable query language.
 
 From Python to Cypher:
 
 ```python
-
-from neopy import (
+from neopy.graph import (
     Node as N, NodeLabel as L,
-    Relationship as R,
-    CypherQuerySet as Qs)
+    RelationshipTo as Rt,
+    RelationshipType as T,
+    Graph)
 
 
-query = Qs().match(
-    N('a'), R(), N(L('Movie'), name='The worst movie ever!')
-).where(a__name__startswith='John').return_('a')
+you = N('you', L('Person'), name='You').create()
 
-for record in query.run():
-    print(record['name'])
+graph = Graph().match(you).create(
+    you,
+    Rt('like', T('like')),
+    N('neo', L('Database'), name='Neo4j')
+).return_(you, 'like', 'neo')
+
+print(graph.query)
+
+# MATCH (you:Person {name: "You"})
+# CREATE (you)-[like:like]->(neo:Database {name: "Neo4j"})
+# RETURN you, like, neo;
 ```
 
-Higher-level methods:
+Just like in Django, the graph queries are lazy, so are only evaluated when
+their results are accessed. There are no side-effects, as Graph methods
+return a modified copy of the graph. It means you can compose queries without
+modifying the previous ones:
 
 ```python
-from neopy import (
-    Node as N, NodeLabel as L,
-    RelationshipTo as Rt, RelationshipType as T)
-    
-   
-node1 = N('id1', L('Label1'), hello='world!').create()
-node2 = N('id2', L('Label2'), other_property='other_value').create()
-node3 = N('id3', L('Label3'))
+graph = Graph()
 
-relationship1 = node1.connect(Rt(T('REL_TYPE1'), weight=9000), node2)
+# prepare some query
+match = graph.match(...)
 
-relationship2 = Rt('id4', T('REL_TYPE2'))
-node1.connect(relationship2, node3)
+# use the match object in different ways, and keep it unmodified
+result1 = match.where(...).return_(...)
+result2 = match.where(...).return_(...)
+
+# run the same query as result2, but with an additional where condition
+result3 = result2.where(...)
 ```
-
-

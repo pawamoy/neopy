@@ -83,6 +83,9 @@ class Query:
         # their cypher IDs only in further statements.
         self.created_ids = set()
 
+    def __str__(self):
+        return self.render()
+
     def add_match(self, *args, **kwargs):
         self.statements.matches.append(StatementArgs(args, kwargs))
 

@@ -92,7 +92,6 @@ class Node(Cypher):
         }
 
     def create(self, *args, **kwargs):
-        print('create node', *(str(a) for a in args), kwargs)
         records = list(Graph().create(self).return_(self).run())
         created = records[0].value(self.cypher_id)
         self.internal_id = created.id
@@ -104,16 +103,16 @@ class Node(Cypher):
         # return rel with start_node=self, end_node=node
         if not self.internal_id:
             raise CypherError
-        query = Graph().match_id(self)
+        graph = Graph().match_id(self)
         if relationship.cypher_id is None:
-            relationship.cypher_id = query.get_unused_id()
+            relationship.cypher_id = graph.query.get_unused_id()
         returns = [relationship]
         if node.internal_id is not None:
-            query = query.match_id(node)
+            graph = graph.match_id(node)
         else:
             returns.append(node)
-        query = query.create(self, relationship, node).return_(*returns)
-        for record in query.run():
+        graph = graph.create(self, relationship, node).return_(*returns)
+        for record in graph.run():
             if isinstance(record, types.Relationship):
                 relationship.internal_id = record.id
                 relationship.start_node = self
