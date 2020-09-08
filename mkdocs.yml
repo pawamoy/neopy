@@ -6,7 +6,7 @@ repo_name: "pawamoy/neopy"
 
 nav:
   - Overview: index.md
-  - Reference:
+  - API Reference:
     - cli.py: reference/cli.md
     - cypher.py: reference/cypher.md
     - db.py: reference/db.md
@@ -31,8 +31,11 @@ markdown_extensions:
   - admonition
   - codehilite:
       guess_lang: false
-  - pymdownx.superfences
   - pymdownx.emoji
+  - pymdownx.magiclink
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - pymdownx.tasklist
   - toc:
       permalink: "¤"
 
