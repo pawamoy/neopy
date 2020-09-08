@@ -2,9 +2,9 @@ from neo4j.v1 import types
 
 from .cypher import Cypher, Properties, Query
 from .db import driver
-from .exceptions import CypherIdAlreadyUsed, CypherError
+from .exceptions import CypherError, CypherIdAlreadyUsed
 from .functions import fn
-from .utils import split_id_args, clone
+from .utils import clone, split_id_args
 
 
 class Graph:
@@ -28,8 +28,7 @@ class Graph:
             node_cypher_id = node.cypher_id
         else:
             node_cypher_id = self.query.get_unused_id()
-        self_clone = self.match(Node(node_cypher_id)).where(
-            fn.Id(node_cypher_id).eq(node.internal_id))
+        self_clone = self.match(Node(node_cypher_id)).where(fn.Id(node_cypher_id).eq(node.internal_id))
         self_clone.query.matched_ids.add(node_cypher_id)
         return self_clone
 
@@ -75,7 +74,7 @@ class NodeLabel:
 
 
 class Node(Cypher):
-    cypher_template = '({id}{labels}{properties})'
+    cypher_template = "({id}{labels}{properties})"
 
     def __init__(self, *args, **properties):
         self.internal_id = None
@@ -86,9 +85,9 @@ class Node(Cypher):
     @property
     def cypher_params(self):
         return {
-            'id': self.cypher_id if self.cypher_id else '',
-            'labels': ':' + ':'.join(l.name for l in self.labels) if self.labels else '',
-            'properties': self.properties.as_cypher()
+            "id": self.cypher_id if self.cypher_id else "",
+            "labels": ":" + ":".join(l.name for l in self.labels) if self.labels else "",
+            "properties": self.properties.as_cypher(),
         }
 
     def create(self):
@@ -119,19 +118,19 @@ class Node(Cypher):
         return relationship
 
     def delete(self, *args, **kwargs):
-        print('delete node', *(str(a) for a in args), kwargs)
+        print("delete node", *(str(a) for a in args), kwargs)
         return self
 
     def set(self, *args, **kwargs):
-        print('set node', *(str(a) for a in args), kwargs)
+        print("set node", *(str(a) for a in args), kwargs)
         return self
 
     def remove(self, *args, **kwargs):
-        print('remove node', *(str(a) for a in args), kwargs)
+        print("remove node", *(str(a) for a in args), kwargs)
         return self
 
     def merge(self, *args, **kwargs):
-        print('merge node', *(str(a) for a in args), kwargs)
+        print("merge node", *(str(a) for a in args), kwargs)
         return self
 
 
@@ -141,7 +140,7 @@ class RelationshipType:
 
 
 class Relationship(Cypher):
-    cypher_template = '-[{id}{types}{length}{properties}]-'
+    cypher_template = "-[{id}{types}{length}{properties}]-"
 
     class LengthRange:
         def __init__(self, min_length, max_length):
@@ -149,20 +148,19 @@ class Relationship(Cypher):
             self.max = max_length
 
         def as_cypher(self):
-            return '*{min}..{max}'.format(min=self.min or '',
-                                          max=self.max or '')
+            return "*{min}..{max}".format(min=self.min or "", max=self.max or "")
 
     class ExactLength:
         def __init__(self, length):
             self.length = length
 
         def as_cypher(self):
-            if self.length in (None, '*'):
-                return '*'
+            if self.length in (None, "*"):
+                return "*"
             elif self.length == 1:
-                return ''
+                return ""
             else:
-                return '*%d' % self.length
+                return "*%d" % self.length
 
     def __init__(self, *args, **properties):
         self.internal_id = None
@@ -182,33 +180,32 @@ class Relationship(Cypher):
     @property
     def cypher_params(self):
         return {
-            'id': self.cypher_id if self.cypher_id else '',
-            'types': ':' + '|'.join(
-                t.name for t in self.types) if self.types else '',
-            'length': self.length.as_cypher(),
-            'properties': self.properties.as_cypher()
+            "id": self.cypher_id if self.cypher_id else "",
+            "types": ":" + "|".join(t.name for t in self.types) if self.types else "",
+            "length": self.length.as_cypher(),
+            "properties": self.properties.as_cypher(),
         }
 
     def delete(self, *args, **kwargs):
-        print('delete relationship', *(str(a) for a in args), kwargs)
+        print("delete relationship", *(str(a) for a in args), kwargs)
         return self
 
     def set(self, *args, **kwargs):
-        print('set relationship', *(str(a) for a in args), kwargs)
+        print("set relationship", *(str(a) for a in args), kwargs)
         return self
 
     def remove(self, *args, **kwargs):
-        print('remove relationship', *(str(a) for a in args), kwargs)
+        print("remove relationship", *(str(a) for a in args), kwargs)
         return self
 
     def merge(self, *args, **kwargs):
-        print('merge relationship', *(str(a) for a in args), kwargs)
+        print("merge relationship", *(str(a) for a in args), kwargs)
         return self
 
 
 class RelationshipTo(Relationship):
-    cypher_template = '-[{id}{types}{length}{properties}]->'
+    cypher_template = "-[{id}{types}{length}{properties}]->"
 
 
 class RelationshipFrom(Relationship):
-    cypher_template = '<-[{id}{types}{length}{properties}]-'
+    cypher_template = "<-[{id}{types}{length}{properties}]-"

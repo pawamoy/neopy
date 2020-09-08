@@ -1,12 +1,13 @@
 from collections import namedtuple
 from copy import deepcopy
 
-
-IdArgsTuple = namedtuple('id_args', 'id args')
+IdArgsTuple = namedtuple("id_args", "id args")
 
 
 def args_to_paths(*args):
-    class Path: pass  # FIXME: temporary
+    class Path:
+        pass  # FIXME: temporary
+
     paths = []
     components = []
     for arg in args:
@@ -34,4 +35,5 @@ def clone(func):
     def new_func(obj, *args, **kwargs):
         obj = deepcopy(obj)
         return func(obj, *args, **kwargs)
+
     return new_func
